@@ -121,13 +121,15 @@ export function extractVideoFeatures(
   const nx = comW > 1e-6 ? comX / comW / Math.max(1, w - 1) : 0.5
   const ny = comW > 1e-6 ? comY / comW / Math.max(1, h - 1) : 0.5
   const comVel = Math.hypot(nx - state.prevComX, ny - state.prevComY)
-  const flow = blockFlowProxy(lum, state.prevLum, w, h)
+  const flowRaw = blockFlowProxy(lum, state.prevLum, w, h)
+  const still = contrast < 0.03 && motionN < 0.03
+  const flow = still ? 0 : flowRaw
   const dLum = meanL - state.prevMean
   const cut = Math.abs(dLum) > 0.18 ? clamp01((Math.abs(dLum) - 0.1) * 3.2) : 0
   const rise = dLum > 0.1 ? clamp01((dLum - 0.06) * 4.2) : 0
   const flash = clamp01(Math.max(rise, cut * 0.85, state.flash * 0.52))
-  const shakeNow = clamp01(motionN * 0.55 + comVel * 2.4 + flow * 0.45)
-  const shake = clamp01(Math.max(shakeNow, state.shake * 0.58))
+  const shakeNow = still ? 0 : clamp01(motionN * 0.55 + comVel * 2.4 + flow * 0.45)
+  const shake = still ? state.shake * 0.28 : clamp01(Math.max(shakeNow, state.shake * 0.58))
 
   state.prevLum = lum
   state.prevMean = meanL
@@ -188,12 +190,13 @@ function blockFlowProxy(cur: Float32Array, prev: Float32Array | null, w: number,
   for (let by = 1; by < gh - 1; by++) {
     for (let bx = 1; bx < gw - 1; bx++) {
       const target = meansC[by * gw + bx]
-      let best = 1e9
+      let best = Math.abs(target - meansP[by * gw + bx])
       let bestD = 0
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue
           const err = Math.abs(target - meansP[(by + dy) * gw + (bx + dx)])
-          if (err < best) {
+          if (err + 1e-4 < best) {
             best = err
             bestD = Math.hypot(dx, dy)
           }
