@@ -38,6 +38,67 @@ const DEFAULT_ACTION: DjAction = {
   punch: 0.15,
 }
 
+const SHOT_FEATURES: AudioFeatures = {
+  rms: 0.4,
+  bass: 0.35,
+  mid: 0.4,
+  high: 0.3,
+  centroid: 0.4,
+  flux: 0.12,
+  onset: 0,
+  beat: 0.35,
+  beatPhase: 0,
+}
+
+function isBoothShot(): boolean {
+  if (typeof window === 'undefined') return false
+  return new URLSearchParams(window.location.search).get('shot') === 'booth'
+}
+
+const POSE_ACTION: DjAction = {
+  crossfade: 0.22,
+  filterA: 0.78,
+  filterB: 0.34,
+  lowEq: 0.7,
+  master: 0.64,
+  punch: 0.58,
+}
+
+function BoothShot() {
+  const live = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('live') === '1'
+  const [action, setAction] = useState<DjAction>(POSE_ACTION)
+  const [features, setFeatures] = useState<AudioFeatures>(SHOT_FEATURES)
+  useEffect(() => {
+    if (!live) return
+    let raf = 0
+    const t0 = performance.now()
+    const tick = (now: number) => {
+      const t = (now - t0) / 1000
+      setAction({
+        crossfade: 0.5 + Math.sin(t * 0.65) * 0.32,
+        filterA: 0.5 + Math.sin(t * 0.9 + 0.4) * 0.3,
+        filterB: 0.5 + Math.cos(t * 0.8) * 0.3,
+        lowEq: 0.5 + Math.sin(t * 0.55 + 1.1) * 0.28,
+        master: 0.55 + Math.sin(t * 0.45) * 0.22,
+        punch: 0.35 + Math.max(0, Math.sin(t * 1.6)) * 0.5,
+      })
+      setFeatures({
+        ...SHOT_FEATURES,
+        beat: 0.25 + Math.max(0, Math.sin(t * 6.2)) * 0.6,
+        beatPhase: (t * 1.4) % 1,
+      })
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [live])
+  return (
+    <div className="app notranslate shot-booth" translate="no">
+      <BoothView action={action} features={features} waveform={null} playing showcase={false} />
+    </div>
+  )
+}
+
 const SHOWCASE_UNLOCK = 0.12
 const QUICK_MS = 52000
 
@@ -45,6 +106,11 @@ type LoadPhase = 'boot' | 'data' | 'csr' | 'ready' | 'error'
 type ShowcasePhase = 'heuristic' | 'trained' | null
 
 export default function App() {
+  if (isBoothShot()) return <BoothShot />
+  return <FlyDjApp />
+}
+
+function FlyDjApp() {
   const [phase, setPhase] = useState<LoadPhase>('boot')
   const [progress, setProgress] = useState('正在读取清单…')
   const [error, setError] = useState<string | null>(null)
