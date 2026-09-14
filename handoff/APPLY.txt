@@ -1,0 +1,3 @@
+tar xzf fly-dj-src-only.tar.gz -C existing-fly-dj-dir --strip-components=0
+# keep existing public/data/weights.csr.bin.gz
+npm install && npm run dev -- --port 47301

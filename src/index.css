@@ -1,0 +1,37 @@
+:root {
+  color-scheme: dark;
+  --bg: #05060c;
+  --ink: #e8eefc;
+  --muted: #8b93ad;
+  --cyan: #3ee0ff;
+  --mag: #ff4da6;
+  --gold: #ffc14a;
+  --line: rgba(130, 160, 220, 0.18);
+  font-family: 'Noto Sans SC', 'Syne', ui-sans-serif, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  translate: no;
+  font-synthesis: none;
+  margin: 0;
+  min-height: 100%;
+  background: radial-gradient(1200px 700px at 15% -10%, #14203a 0%, transparent 50%),
+    radial-gradient(900px 600px at 100% 0%, #2a1030 0%, transparent 46%), #05060c;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+a {
+  color: var(--cyan);
+}
