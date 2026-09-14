@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
-const url = process.argv[2] ?? 'http://127.0.0.1:47301/?shot=booth'
+const url = process.argv[2] ?? 'http://127.0.0.1:47301/?shot=booth&pose=1'
 const out = resolve(process.argv[3] ?? 'handoff/fly-behind-decks.png')
 mkdirSync(dirname(out), { recursive: true })
 
@@ -17,7 +17,6 @@ const chrome =
 
 const args = [
   '--headless=new',
-  '--disable-gpu',
   '--hide-scrollbars',
   '--disable-features=Translate,TranslateUI',
   '--lang=zh-CN',
@@ -25,8 +24,19 @@ const args = [
   '--disable-translate',
   '--no-first-run',
   '--no-default-browser-check',
+  '--disable-sync',
+  '--disable-background-networking',
+  '--disable-component-update',
+  '--disable-extensions',
+  '--user-data-dir=/tmp/fly-dj-chrome-shot',
+  '--enable-unsafe-swiftshader',
+  '--use-gl=angle',
+  '--use-angle=swiftshader',
+  '--ignore-gpu-blocklist',
+  '--enable-webgl',
   '--window-size=1440,900',
-  '--virtual-time-budget=6000',
+  '--timeout=18000',
+  '--virtual-time-budget=8000',
   `--screenshot=${out}`,
   url,
 ]

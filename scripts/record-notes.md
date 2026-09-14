@@ -35,6 +35,7 @@ If a translate infobar still appears: set Chrome language to match the page (`zh
 | --- | --- |
 | `http://127.0.0.1:47301/` | Full app (CSR load, then Start the set) |
 | `http://127.0.0.1:47301/?shot=booth` | Booth only — fly behind decks, 6 legs on controls, no CSR |
+| `http://127.0.0.1:47301/?shot=booth&live=1` | Same booth, faders animate so legs track live |
 
 ```bash
 npm run dev          # :47301

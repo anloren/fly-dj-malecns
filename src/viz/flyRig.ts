@@ -51,6 +51,8 @@ type Leg = {
   kneeBall: THREE.Mesh
   hipBall: THREE.Mesh
   tip: THREE.Mesh
+  chord: THREE.Line
+  chordPos: Float32Array
 }
 
 function chitinMat(color: number, emissive = 0x061018, eInt = 0.2): THREE.MeshPhysicalMaterial {
@@ -124,6 +126,13 @@ function solveLeg(leg: Leg, targetLocal: THREE.Vector3) {
   leg.kneeBall.position.copy(_knee)
   leg.hipBall.position.copy(leg.hip)
   leg.tip.position.copy(_tgt)
+  leg.chordPos[0] = leg.hip.x
+  leg.chordPos[1] = leg.hip.y
+  leg.chordPos[2] = leg.hip.z
+  leg.chordPos[3] = _tgt.x
+  leg.chordPos[4] = _tgt.y
+  leg.chordPos[5] = _tgt.z
+  ;(leg.chord.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true
 }
 
 /** Local-space reach fallbacks if BoothView has not yet published world targets. +Z = toward desk/camera. */
@@ -183,19 +192,12 @@ export function createFlyRig(): FlyRig {
     emissive: new THREE.Color(0x4fd2ff),
     emissiveIntensity: 1.15,
   })
-  const legMat = new THREE.MeshStandardMaterial({
-    color: 0x6a4a28,
-    roughness: 0.4,
-    metalness: 0.2,
-    emissive: new THREE.Color(0x3a2208),
-    emissiveIntensity: 0.55,
-  })
   const jointMat = new THREE.MeshStandardMaterial({
-    color: 0xe8b84a,
-    roughness: 0.35,
-    metalness: 0.5,
+    color: 0xffd36a,
+    roughness: 0.3,
+    metalness: 0.45,
     emissive: new THREE.Color(0xffaa22),
-    emissiveIntensity: 0.7,
+    emissiveIntensity: 1.35,
   })
 
   const abdomen = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 18), body)
@@ -274,24 +276,35 @@ export function createFlyRig(): FlyRig {
   inner.add(keyFill, rimC, rimM, belly)
 
   const specs: { id: LegId; hip: [number, number, number]; femur: number; tibia: number; pole: [number, number, number] }[] = [
-    { id: 'L1', hip: [-0.13, 0.03, 0.11], femur: 0.34, tibia: 0.4, pole: [-0.55, 0.48, 0.06] },
-    { id: 'L2', hip: [-0.15, 0.01, -0.01], femur: 0.33, tibia: 0.38, pole: [-0.62, 0.44, -0.02] },
-    { id: 'L3', hip: [-0.13, 0.0, -0.15], femur: 0.3, tibia: 0.36, pole: [-0.5, 0.4, -0.16] },
-    { id: 'R1', hip: [0.13, 0.03, 0.11], femur: 0.34, tibia: 0.4, pole: [0.55, 0.48, 0.06] },
-    { id: 'R2', hip: [0.15, 0.01, -0.01], femur: 0.33, tibia: 0.38, pole: [0.62, 0.44, -0.02] },
-    { id: 'R3', hip: [0.13, 0.0, -0.15], femur: 0.3, tibia: 0.36, pole: [0.5, 0.4, -0.16] },
+    { id: 'L1', hip: [-0.13, 0.03, 0.11], femur: 0.48, tibia: 0.56, pole: [-0.62, 0.52, 0.08] },
+    { id: 'L2', hip: [-0.16, 0.01, -0.01], femur: 0.5, tibia: 0.58, pole: [-0.7, 0.48, 0.0] },
+    { id: 'L3', hip: [-0.14, 0.0, -0.16], femur: 0.46, tibia: 0.52, pole: [-0.58, 0.44, -0.18] },
+    { id: 'R1', hip: [0.13, 0.03, 0.11], femur: 0.48, tibia: 0.56, pole: [0.62, 0.52, 0.08] },
+    { id: 'R2', hip: [0.16, 0.01, -0.01], femur: 0.5, tibia: 0.58, pole: [0.7, 0.48, 0.0] },
+    { id: 'R3', hip: [0.14, 0.0, -0.16], femur: 0.46, tibia: 0.52, pole: [0.58, 0.44, -0.18] },
   ]
 
   const legs: Leg[] = specs.map((s) => {
     const hue = LEG_COLOR[s.id]
-    const femur = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.013, 1, 7), legMat)
-    const tibia = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.007, 1, 7), legMat)
-    const kneeBall = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), jointMat)
-    const hipBall = new THREE.Mesh(new THREE.SphereGeometry(0.02, 10, 8), jointMat)
-    const tip = glowBall(0.032, hue, 0.95)
+    const boneMat = new THREE.MeshStandardMaterial({
+      color: hue,
+      roughness: 0.35,
+      metalness: 0.2,
+      emissive: new THREE.Color(hue),
+      emissiveIntensity: 0.55,
+    })
+    const femur = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.02, 1, 7), boneMat)
+    const tibia = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.012, 1, 7), boneMat)
+    const kneeBall = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), jointMat)
+    const hipBall = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 8), jointMat)
+    const tip = glowBall(0.06, hue, 1)
     const halo = new THREE.PointLight(hue, 0.85, 1.15)
     tip.add(halo)
-    inner.add(femur, tibia, kneeBall, hipBall, tip)
+    const chordPos = new Float32Array(6)
+    const chordGeo = new THREE.BufferGeometry()
+    chordGeo.setAttribute('position', new THREE.BufferAttribute(chordPos, 3))
+    const chord = new THREE.Line(chordGeo, new THREE.LineBasicMaterial({ color: hue, transparent: true, opacity: 0.85 }))
+    inner.add(femur, tibia, kneeBall, hipBall, tip, chord)
     return {
       id: s.id,
       hip: new THREE.Vector3(...s.hip),
@@ -303,8 +316,23 @@ export function createFlyRig(): FlyRig {
       kneeBall,
       hipBall,
       tip,
+      chord,
+      chordPos,
     }
   })
+
+  const restAction: DjAction = {
+    crossfade: 0.22,
+    filterA: 0.78,
+    filterB: 0.34,
+    lowEq: 0.7,
+    master: 0.64,
+    punch: 0.58,
+  }
+  for (const leg of legs) {
+    fallbackLocal(leg.id, restAction, _world)
+    solveLeg(leg, _world)
+  }
 
   return {
     group,
@@ -317,7 +345,7 @@ export function createFlyRig(): FlyRig {
       inner.position.x = lean * 0.05
       inner.rotation.y = lean * 0.28
       inner.rotation.z = -lean * 0.22 + Math.sin(t * 3.1) * 0.02
-      inner.rotation.x = -0.16 + action.punch * 0.1 + beat * 0.04
+      inner.rotation.x = -0.22 + action.punch * 0.1 + beat * 0.04
 
       headG.rotation.y = lean * 0.55 + twist * 0.28
       headG.rotation.x = -0.06 + action.punch * 0.28 + beat * 0.16

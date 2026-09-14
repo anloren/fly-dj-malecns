@@ -55,17 +55,21 @@ function isBoothShot(): boolean {
   return new URLSearchParams(window.location.search).get('shot') === 'booth'
 }
 
+const POSE_ACTION: DjAction = {
+  crossfade: 0.22,
+  filterA: 0.78,
+  filterB: 0.34,
+  lowEq: 0.7,
+  master: 0.64,
+  punch: 0.58,
+}
+
 function BoothShot() {
-  const [action, setAction] = useState<DjAction>({
-    crossfade: 0.28,
-    filterA: 0.72,
-    filterB: 0.38,
-    lowEq: 0.62,
-    master: 0.7,
-    punch: 0.48,
-  })
+  const live = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('live') === '1'
+  const [action, setAction] = useState<DjAction>(POSE_ACTION)
   const [features, setFeatures] = useState<AudioFeatures>(SHOT_FEATURES)
   useEffect(() => {
+    if (!live) return
     let raf = 0
     const t0 = performance.now()
     const tick = (now: number) => {
@@ -87,7 +91,7 @@ function BoothShot() {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [])
+  }, [live])
   return (
     <div className="app notranslate shot-booth" translate="no">
       <BoothView action={action} features={features} waveform={null} playing showcase={false} />
