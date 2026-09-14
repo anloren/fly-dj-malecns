@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DjEngine,
+  applyVideoMotive,
   calloutFromDelta,
   ensureAudible,
   exaggerate,
@@ -23,8 +24,11 @@ import type {
   Readout,
   TrainKnobs,
   TypeBook,
+  VideoFeatures,
 } from './types'
 import { ACTION_KEYS, POOL_ZH } from './types'
+import { sumInject } from './video/features'
+import { VideoMotivePanel } from './video/VideoMotivePanel'
 import { BoothView } from './viz/BoothView'
 import { ConnectomeView } from './viz/ConnectomeView'
 import './App.css'
@@ -139,8 +143,12 @@ function FlyDjApp() {
   const [callout, setCallout] = useState<Callout | null>(null)
   const [deltas, setDeltas] = useState<FaderDeltas>(emptyDeltas)
   const [injects, setInjects] = useState<Float32Array | null>(null)
+  const [videoOn, setVideoOn] = useState(false)
 
   const djRef = useRef<DjEngine | null>(null)
+  const videoOnRef = useRef(false)
+  const videoFeatRef = useRef<VideoFeatures | null>(null)
+  const videoInjectRef = useRef<Float32Array | null>(null)
   const workerRef = useRef<Worker | null>(null)
   const modeRef = useRef<ControllerMode>('heuristic')
   const trainRef = useRef(false)
@@ -181,6 +189,24 @@ function FlyDjApp() {
     knobsRef.current = knobs
     saveKnobs(knobs)
   }, [knobs])
+  useEffect(() => {
+    videoOnRef.current = videoOn
+    if (!videoOn) {
+      videoFeatRef.current = null
+      videoInjectRef.current = null
+    }
+  }, [videoOn])
+
+  const onVideoSample = useCallback((feat: VideoFeatures | null, inj: Float32Array | null) => {
+    videoFeatRef.current = feat
+    videoInjectRef.current = inj
+  }, [])
+
+  const withVideoInject = useCallback((inject: Float32Array, gains: Float32Array, steps: number) => {
+    const videoInject =
+      videoOnRef.current && videoInjectRef.current ? new Float32Array(videoInjectRef.current) : undefined
+    return { type: 'step' as const, inject, videoInject, gains, steps, dt: 0.016 }
+  }, [])
 
   const rewardMa = useMemo(() => {
     if (!rewards.length) return 0
@@ -245,13 +271,7 @@ function FlyDjApp() {
             setProgress(`LIF 就绪 · ${msg.nNodes} 节点 / ${msg.nEdges} 边 · boot ${msg.bootSpikes ?? 0} spikes`)
             setPhase('ready')
             const nP = tb.pools.length
-            worker.postMessage({
-              type: 'step',
-              inject: new Float32Array(nP),
-              gains: new Float32Array(nP).fill(1),
-              steps: 1,
-              dt: 0.016,
-            })
+            worker.postMessage(withVideoInject(new Float32Array(nP), new Float32Array(nP).fill(1), 1))
           }
           if (msg.type === 'state') {
             setWorkerMs(msg.stepMs)
@@ -270,13 +290,13 @@ function FlyDjApp() {
             const dj = djRef.current
             if (!dj?.started) {
               const nP = tb.pools.length
-              worker.postMessage({
-                type: 'step',
-                inject: new Float32Array(nP),
-                gains: new Float32Array(nP).fill(1),
-                steps: 1,
-                dt: 0.016,
-              })
+              if (videoOnRef.current && videoFeatRef.current) {
+                const next = applyVideoMotive(DEFAULT_ACTION, videoFeatRef.current)
+                actionRef.current = next
+                setAction(next)
+                setInjects(videoInjectRef.current)
+              }
+              worker.postMessage(withVideoInject(new Float32Array(nP), new Float32Array(nP).fill(1), 1))
               return
             }
             const feat = dj.features()
@@ -319,12 +339,14 @@ function FlyDjApp() {
                 setShowcasePhase(phaseNow)
               }
             }
-            if (m === 'showcase' && phaseNow === 'heuristic') next = heuristicAction(feat)
-            else if (m === 'heuristic') next = heuristicAction(feat)
+            const vfeat = videoOnRef.current ? videoFeatRef.current : null
+            if (m === 'showcase' && phaseNow === 'heuristic') next = heuristicAction(feat, vfeat)
+            else if (m === 'heuristic') next = heuristicAction(feat, vfeat)
             else if (m === 'random') next = randomAction(actionRef.current, rngRef.current)
             else if (m === 'showcase') {
               const pa = pol.act(state)
               next = ensureAudible(pa.action, teach, Math.min(SHOWCASE_GAIN, 1.15 + k.actionGain * 0.25))
+              if (vfeat) next = applyVideoMotive(next, vfeat)
               inject = new Float32Array(enc.mean(feat))
               gains = new Float32Array(gn.values)
               avec = new Float32Array(pa.vec)
@@ -344,7 +366,7 @@ function FlyDjApp() {
             const prevAct = actionRef.current
             actionRef.current = next
             setAction(next)
-            setInjects(inject)
+            setInjects(sumInject(inject, videoOnRef.current ? videoInjectRef.current : null))
 
             const note = calloutFromDelta(prevAct, next)
             if (note && (m === 'showcase' || Math.abs(next.crossfade - prevAct.crossfade) > 0.05)) {
@@ -422,7 +444,7 @@ function FlyDjApp() {
             }
             const liveInject = new Float32Array(inject)
             for (let i = 0; i < liveInject.length; i++) liveInject[i] += 0.2
-            worker.postMessage({ type: 'step', inject: liveInject, gains, steps: 2, dt: 0.016 })
+            worker.postMessage(withVideoInject(liveInject, gains, 2))
           }
         }
         worker.postMessage({
@@ -444,7 +466,7 @@ function FlyDjApp() {
       dead = true
       workerRef.current?.terminate()
     }
-  }, [pickViz])
+  }, [pickViz, withVideoInject])
 
   useEffect(() => {
     if (!quickLeft) return
@@ -470,17 +492,17 @@ function FlyDjApp() {
       dj.apply(actionRef.current)
       djRef.current = dj
       setPlaying(true)
-      workerRef.current?.postMessage({
-        type: 'step',
-        inject: new Float32Array(types?.pools.length ?? 22),
-        gains: new Float32Array(types?.pools.length ?? 22).fill(1),
-        steps: 1,
-        dt: 0.016,
-      })
+      workerRef.current?.postMessage(
+        withVideoInject(
+          new Float32Array(types?.pools.length ?? 22),
+          new Float32Array(types?.pools.length ?? 22).fill(1),
+          1,
+        ),
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [types])
+  }, [types, withVideoInject])
 
   const onMode = (m: ControllerMode) => {
     if (m === 'showcase') {
@@ -593,6 +615,13 @@ function FlyDjApp() {
             />
           </main>
 
+          <VideoMotivePanel
+            enabled={videoOn}
+            onEnabled={setVideoOn}
+            pools={types.pools}
+            onSample={onVideoSample}
+          />
+
           <section className="console train-console">
             <div className="console-left">
               <div className="modes">
@@ -637,6 +666,7 @@ function FlyDjApp() {
                     : mode === 'heuristic'
                       ? '启发式把低频/频谱映射到推子，不更新权重。'
                       : '随机游走推子，用作对照——Showcase 必须在约 10 秒内听出差别。'}
+                {videoOn ? ' 视频动机开：黑帧压低冲击/滤波，闪切或抖动把 punch 推高（启发式映射，不是果蝇视觉）。' : ''}
               </p>
               <KnobPanel knobs={knobs} onChange={patchKnob} />
             </div>
@@ -673,7 +703,10 @@ function FlyDjApp() {
             </div>
             <div className="pools">
               {poolBars.map((p) => (
-                <div key={p.id} className="pool">
+                <div
+                  key={p.id}
+                  className={`pool${videoOn && (p.id === 'visual' || p.id === 'mechano' || p.id === 'sensory_other') ? ' video-driven' : ''}`}
+                >
                   <span>
                     {p.zh}
                     <em>{p.id}</em>
@@ -695,7 +728,8 @@ function FlyDjApp() {
             'CSR synapses are frozen MaleCNS v1.0 counts. Only the sensory encoder, optional pathway gains, and DJ policy head are trained. This is not biological spike data.'}{' '}
           边来自官方 feather（MD5 <code>f30e9dcca25cfd021bf1e7b3d975599e</code>），规则为 weight≥3 且
           typed↔typed，从未编造突触。壳体为 FlyEM 官方 CB / OL / VNC neuropil shell，已抽稀仅供浏览器显示。音频为程序合成的可循环床，经 Web
-          Audio 双唱盘、交叉推子、滤波、低频 EQ 与主音量真实播放。
+          Audio 双唱盘、交叉推子、滤波、低频 EQ 与主音量真实播放。视频动机把亮度/帧差等启发式特征注入 visual / mechano /
+          sensory_other，与音频 inject 相加；不是真实复眼或完整生物物理。
         </p>
       </footer>
     </div>

@@ -1,4 +1,4 @@
-import type { AudioFeatures, DjAction } from '../types'
+import type { AudioFeatures, DjAction, VideoFeatures } from '../types'
 
 const FFT = 2048
 
@@ -320,14 +320,29 @@ export function calloutFromDelta(prev: DjAction, next: DjAction): { zh: string; 
   return best
 }
 
-export function heuristicAction(feat: AudioFeatures): DjAction {
-  return {
+export function heuristicAction(feat: AudioFeatures, video?: VideoFeatures | null): DjAction {
+  const base: DjAction = {
     crossfade: clamp(0.5 + (feat.centroid - 0.45) * 0.7, 0.08, 0.92),
     filterA: clamp(0.35 + feat.bass * 0.45, 0, 1),
     filterB: clamp(0.4 + feat.high * 0.5, 0, 1),
     lowEq: clamp(0.35 + feat.bass * 0.4, 0, 1),
     master: clamp(0.42 + feat.rms * 0.25, 0.2, 0.8),
     punch: clamp(feat.onset * 0.7 + feat.beat * 0.4, 0, 1),
+  }
+  return video ? applyVideoMotive(base, video) : base
+}
+
+/** Situational DJ motive from video features. Black → quiet; flash/cut → punch. */
+export function applyVideoMotive(action: DjAction, v: VideoFeatures): DjAction {
+  const dark = clamp(1 - v.lum * 1.85, 0, 1)
+  const energy = clamp(v.lum * 0.5 + v.flash * 1.05 + v.shake * 0.4 + v.motion * 0.18, 0, 1)
+  return {
+    crossfade: clamp(action.crossfade + (v.shake - 0.12) * 0.2 + (v.hueWarm - v.hueCool) * 0.1, 0, 1),
+    filterA: clamp(action.filterA * (1 - dark * 0.78) + energy * 0.32 - dark * 0.22, 0, 1),
+    filterB: clamp(action.filterB * (1 - dark * 0.78) + energy * 0.28 - dark * 0.22, 0, 1),
+    lowEq: clamp(action.lowEq * (0.38 + v.lum * 0.62) + v.motion * 0.08, 0, 1),
+    master: clamp(action.master * (0.52 + v.lum * 0.52) + v.flash * 0.14, 0.1, 0.95),
+    punch: clamp(action.punch * (0.06 + v.lum * 0.38) + v.flash * 0.94 + v.shake * 0.38, 0, 1),
   }
 }
 

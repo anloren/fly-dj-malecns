@@ -43,6 +43,27 @@ HUD 数字来自 `public/data/manifest.json`：**164506** 个 typed 节点，**1
 
 算法是 **REINFORCE + 滑动基线 + 可选教师模仿**。只训练编码器、增益、策略头。
 
+## 视频动机 / Video motive
+
+可选路径：**视频帧 → 廉价视觉/运动特征 → 与音频同一套 inject 接口写入分型感觉池 → 冻结 LIF → 现有策略/推子**。CSR 边权始终冻结。不训练 CSR，也不依赖 Flow Music。
+
+1. `npm run dev`，等 LIF 就绪。
+2. 点 **开始演出 / Start the set**，模式用 **启发式 Heuristic** 或 **展示打碟 / Showcase**。
+3. 打开 **视频动机 / Video motive**。选本地视频、摄像头，或点 **20s 测试图案 / Test pattern**。
+4. 特征条约 15 Hz 更新；右侧显示当前注入的 `visual` / `mechano` / `sensory_other`。
+
+**20 秒测试图案（黑 → 闪切 → 抖动）**
+
+| 时间 | 画面 | 预期 |
+| --- | --- | --- |
+| 0–6 s | 黑帧 | punch / 滤波压低（安静） |
+| ~6.1 s | 白闪 | punch 上推 |
+| 10–12 s | 黑白快切 | 闪切条 + punch 再抬 |
+| 12–16 s | 晃动色块 | `mechano` 注入升高 |
+| 16–20 s | 再黑 | 推子回落 |
+
+**诚实说明：** 这是启发式 feature→pool 映射，**不是**真实果蝇视觉或完整生物物理。亮度/对比/RGB/边缘走 `visual`，帧差/光流代理/抖动走 `mechano`，闪切残差走 `sensory_other`，再与音频 inject **相加** 后送进同一个冻结 LIF。
+
 ## 现场面板
 
 - **连接组**：胞体热力按发放率百分位上色；Raster 带 colorbar；类型行在饱和时标 `sat` 并给 Δ / z。相机随 meanRate 轻微公转/脉动。
