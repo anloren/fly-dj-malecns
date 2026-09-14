@@ -46,7 +46,27 @@ HUD 数字来自 `public/data/manifest.json`：**164506** 个 typed 节点，**1
 ## 现场面板
 
 - **连接组**：胞体热力按发放率百分位上色；Raster 带 colorbar；类型行在饱和时标 `sat` 并给 Δ / z。相机随 meanRate 轻微公转/脉动。
-- **DJ 台**：果蝇为深色甲壳 + 青/品红描边、大红复眼、透光蓝翅、金色腹纹、可见足。前足伸向 A/B 唱盘与交叉推子；交叉时身体倾斜，滤波时扭转，冲击时点头+振翅。
+- **DJ 台**：三四分正面机位。果蝇站在打碟台**后方**（身体比唱盘更远、台面在相机与脚之间），脸朝观众，六条腿一一对应六个控件并跟着推子走：
+  - L1 前足 → 交叉 XF
+  - L2 中足 → 滤波 A
+  - L3 后足 → 低频 LOW
+  - R1 前足 → 滤波 B
+  - R2 中足 → 主音量 MST
+  - R3 后足 → 冲击 punch
+
+## 录屏 / Recording
+
+Chrome 不得弹出 Google 翻译条。启动参数与页面语言见 [`scripts/record-notes.md`](scripts/record-notes.md)。
+
+```bash
+google-chrome \
+  --disable-features=Translate,TranslateUI \
+  --lang=zh-CN \
+  --accept-lang=zh-CN \
+  "http://127.0.0.1:47301/"
+```
+
+只拍 DJ 台（不加载 CSR）：`http://127.0.0.1:47301/?shot=booth`。`html lang="zh-CN"`、`translate="no"`、`notranslate` 已写在页面上。
 
 ## 本地运行
 
