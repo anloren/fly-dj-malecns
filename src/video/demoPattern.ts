@@ -8,7 +8,7 @@ export function drawDemoPattern(ctx: CanvasRenderingContext2D, tSec: number, w: 
     ctx.fillRect(0, 0, w, h)
     return
   }
-  if (t < 6.28) {
+  if (t < 7.1) {
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, w, h)
     return
@@ -19,7 +19,7 @@ export function drawDemoPattern(ctx: CanvasRenderingContext2D, tSec: number, w: 
     return
   }
   if (t < 12.2) {
-    const on = Math.floor(t * 9) % 2 === 0
+    const on = Math.floor(t * 3) % 2 === 0
     ctx.fillStyle = on ? '#f5f7ff' : '#0a0c12'
     ctx.fillRect(0, 0, w, h)
     return
