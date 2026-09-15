@@ -43,9 +43,29 @@ HUD 数字来自 `public/data/manifest.json`：**164506** 个 typed 节点，**1
 
 算法是 **REINFORCE + 滑动基线 + 可选教师模仿**。只训练编码器、增益、策略头。
 
+## 床轨 / Flow Music beds
+
+仓库已包含 4 对 30 秒离线循环，清单在 `public/audio/beds/manifest.json`（**床轨现已进仓库**，不再只存在本机）：
+
+| 对 | BPM | 文件 |
+| --- | --- | --- |
+| Techno 120（默认） | 120 | `techno_120_a.wav` / `techno_120_b.wav` |
+| Glitch 110 | 110 | `glitch_110_a.wav` / `glitch_110_b.wav` |
+| Ambient 90 | 90 | `ambient_90_a.wav` / `ambient_90_b.wav` |
+| Breakbeat 140 | 140 | `breakbeat_140_a.wav` / `breakbeat_140_b.wav` |
+
+`public/audio/deck-a.wav` / `deck-b.wav` 是 Techno 120 A/B 的拷贝，冷启动不点 pill 也能响。界面 **床轨 / Beds** 可换对；Showcase、Quick Train 或换轨进行中会锁定。换轨只替换 Web Audio 循环并更新 `bedBpm`（节拍相位），**不改 CSR**。
+
+**诚实说明：** 这些是 Flow Music 离线器乐循环，**不是**「神经元在作曲」。
+
+1. `npm run dev`，等 LIF 就绪。
+2. 点 **开始演出 / Start the set**（默认 Techno 120）。
+3. 在 **床轨 / Beds** 点 Glitch / Ambient / Breakbeat，听交叉与滤波是否跟着新 BPM 走。
+4. 可同时打开下方 **视频动机 / Video motive**（见下一节）。
+
 ## 视频动机 / Video motive
 
-可选路径：**视频帧 → 廉价视觉/运动特征 → 与音频同一套 inject 接口写入分型感觉池 → 冻结 LIF → 现有策略/推子**。CSR 边权始终冻结。不训练 CSR，也不依赖 Flow Music。
+可选路径：**视频帧 → 廉价视觉/运动特征 → 与音频同一套 inject 接口写入分型感觉池 → 冻结 LIF → 现有策略/推子**。CSR 边权始终冻结。不训练 CSR。床轨选择器（Flow Music 离线库）与视频动机可同时使用。
 
 1. `npm run dev`，等 LIF 就绪。
 2. 点 **开始演出 / Start the set**，模式用 **启发式 Heuristic** 或 **展示打碟 / Showcase**。
@@ -63,6 +83,8 @@ HUD 数字来自 `public/data/manifest.json`：**164506** 个 typed 节点，**1
 | 16–20 s | 再黑 | 推子回落 |
 
 **诚实说明：** 这是启发式 feature→pool 映射，**不是**真实果蝇视觉或完整生物物理。亮度/对比/RGB/边缘走 `visual`，帧差/光流代理/抖动走 `mechano`，闪切残差走 `sensory_other`，再与音频 inject **相加** 后送进同一个冻结 LIF。
+
+**一起试（beds + video）：** 先开始演出 → 换一条床轨（例如 Breakbeat 140）→ 打开视频动机并点 **20s 测试图案**。黑帧应压低 punch，白闪应抬 punch；床轨 BPM 与视频启发式互不抢 CSR。
 
 ## 现场面板
 
@@ -99,7 +121,7 @@ npm run build        # 生产构建必须通过
 
 ## 数据重建（可选）
 
-仓库已带剪枝后的 `public/data/weights.csr.bin.gz`，**不要**把 1.1 GB feather 或未压缩 ~83 MB CSR 提交进去。
+仓库已带剪枝后的 `public/data/weights.csr.bin.gz`，**不要**把 1.1 GB feather 或未压缩 ~83 MB CSR 提交进去。床轨 WAV 已在 `public/audio/beds/`；`scripts/generate_beds.py` 只生成旧的短合成 fallback，不是 Flow Music 库。
 
 ```bash
 # 官方 feather（先校验 MD5）
@@ -112,4 +134,4 @@ python3 scripts/generate_beds.py
 
 ## 诚实说明
 
-这不是生物真实放电。壳体与边权来自 Janelia FlyEM MaleCNS v1.0（请遵循上游数据使用规范）。LIF 是示意动力学；奖励是打碟代理，不是行为学实验。
+这不是生物真实放电。壳体与边权来自 Janelia FlyEM MaleCNS v1.0（请遵循上游数据使用规范）。LIF 是示意动力学；奖励是打碟代理，不是行为学实验。CSR 解剖边始终冻结。床轨是 Flow Music 离线器乐循环，不是神经元作曲。视频动机是廉价亮度/运动启发式，不是果蝇视觉。

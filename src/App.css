@@ -513,6 +513,57 @@
   color: #fff;
 }
 
+.beds {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(8, 10, 20, 0.55);
+}
+
+.beds-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.beds-head em {
+  font-style: normal;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.bed-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bed-pills button {
+  border: 1px solid var(--line);
+  background: #0c101c;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.bed-pills button.on {
+  background: linear-gradient(90deg, rgba(255, 193, 74, 0.22), rgba(62, 224, 255, 0.18));
+  border-color: rgba(255, 193, 74, 0.55);
+  color: #fff;
+}
+
+.bed-pills button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .go {
   margin-top: 10px;
   width: 100%;

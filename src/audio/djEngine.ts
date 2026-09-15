@@ -17,6 +17,8 @@ export class DjEngine {
   private time = new Uint8Array(FFT)
   private beatPhase = 0
   started = false
+  /** BPM of the currently loaded bed pair (drives beat-phase features). */
+  bedBpm = 120
 
   constructor(ctx: AudioContext) {
     this.ctx = ctx
@@ -48,15 +50,21 @@ export class DjEngine {
     this.punch.gain.value = 1
   }
 
-  async loadBeds(urlA: string, urlB: string): Promise<void> {
+  async loadBeds(urlA: string, urlB: string, opts?: { bpm?: number }): Promise<void> {
     const [a, b] = await Promise.all([fetch(urlA), fetch(urlB)])
-    if (!a.ok || !b.ok) throw new Error('DJ beds missing — expected /audio/deck-a.wav and deck-b.wav')
+    if (!a.ok || !b.ok) throw new Error(`DJ beds missing — expected ${urlA} and ${urlB}`)
     const [bufA, bufB] = await Promise.all([
       this.ctx.decodeAudioData(await a.arrayBuffer()),
       this.ctx.decodeAudioData(await b.arrayBuffer()),
     ])
     this.deckA.setBuffer(bufA)
     this.deckB.setBuffer(bufB)
+    if (opts?.bpm && Number.isFinite(opts.bpm) && opts.bpm > 0) this.bedBpm = opts.bpm
+    // Seamless reload: if decks were already running, swap in the new loops.
+    if (this.started) {
+      this.deckA.restart()
+      this.deckB.restart()
+    }
   }
 
   async start(): Promise<void> {
@@ -129,8 +137,8 @@ export class DjEngine {
     const centroid = magSum > 1e-6 ? clamp(freqW / magSum / 6000, 0, 1) : 0.3
     flux = clamp(flux / 40, 0, 1)
     const onset = flux > 0.18 ? clamp((flux - 0.18) * 3, 0, 1) : 0
-    // 120 BPM beds — lock a running phase to wall time
-    const bpm = 120
+    // Lock beat phase to the active bed BPM
+    const bpm = this.bedBpm || 120
     this.beatPhase = ((this.ctx.currentTime * bpm) / 60) % 1
     const beat = this.beatPhase < 0.12 ? 1 - this.beatPhase / 0.12 : 0
 
@@ -190,6 +198,29 @@ class Deck {
     this.source.connect(this.filter)
     this.source.start()
     this.running = true
+  }
+
+  stop(): void {
+    if (this.source) {
+      try {
+        this.source.stop()
+      } catch {
+        /* already stopped */
+      }
+      try {
+        this.source.disconnect()
+      } catch {
+        /* already disconnected */
+      }
+      this.source = null
+    }
+    this.running = false
+  }
+
+  /** Swap to the buffer currently on this.buffer and start looping again. */
+  restart(): void {
+    this.stop()
+    this.start()
   }
 
   setFilter(amount: number, tau = 0.04): void {

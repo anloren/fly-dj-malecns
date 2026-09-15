@@ -1,0 +1,99 @@
+{
+  "note": "30s Flow Music offline instrumental loops shipped in this repo (public/audio/beds/). Not neurons composing music.",
+  "pairs": [
+    {
+      "id": "techno_120",
+      "label": "Techno 120",
+      "bpm": 120,
+      "a": "techno_120_a.wav",
+      "b": "techno_120_b.wav"
+    },
+    {
+      "id": "glitch_110",
+      "label": "Glitch 110",
+      "bpm": 110,
+      "a": "glitch_110_a.wav",
+      "b": "glitch_110_b.wav"
+    },
+    {
+      "id": "ambient_90",
+      "label": "Ambient 90",
+      "bpm": 90,
+      "a": "ambient_90_a.wav",
+      "b": "ambient_90_b.wav"
+    },
+    {
+      "id": "breakbeat_140",
+      "label": "Breakbeat 140",
+      "bpm": 140,
+      "a": "breakbeat_140_a.wav",
+      "b": "breakbeat_140_b.wav"
+    }
+  ],
+  "tracks": [
+    {
+      "id": "techno_120_a",
+      "bpm": 120,
+      "style": "techno",
+      "role": "A",
+      "file": "techno_120_a.wav",
+      "loop_seconds": 30
+    },
+    {
+      "id": "techno_120_b",
+      "bpm": 120,
+      "style": "techno",
+      "role": "B",
+      "file": "techno_120_b.wav",
+      "loop_seconds": 30
+    },
+    {
+      "id": "glitch_110_a",
+      "bpm": 110,
+      "style": "glitch",
+      "role": "A",
+      "file": "glitch_110_a.wav",
+      "loop_seconds": 30
+    },
+    {
+      "id": "glitch_110_b",
+      "bpm": 110,
+      "style": "glitch",
+      "role": "B",
+      "file": "glitch_110_b.wav",
+      "loop_seconds": 30
+    },
+    {
+      "id": "ambient_90_a",
+      "bpm": 90,
+      "style": "ambient",
+      "role": "A",
+      "file": "ambient_90_a.wav",
+      "loop_seconds": 30
+    },
+    {
+      "id": "ambient_90_b",
+      "bpm": 90,
+      "style": "ambient",
+      "role": "B",
+      "file": "ambient_90_b.wav",
+      "loop_seconds": 30
+    },
+    {
+      "id": "breakbeat_140_a",
+      "bpm": 140,
+      "style": "breakbeat",
+      "role": "A",
+      "file": "breakbeat_140_a.wav",
+      "loop_seconds": 30
+    },
+    {
+      "id": "breakbeat_140_b",
+      "bpm": 140,
+      "style": "breakbeat",
+      "role": "B",
+      "file": "breakbeat_140_b.wav",
+      "loop_seconds": 30
+    }
+  ]
+}
