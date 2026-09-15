@@ -100,7 +100,55 @@ async function clickText(page, re) {
   return true
 }
 
+async function clickExact(page, label) {
+  const found = await page.evaluate((lab) => {
+    const el = [...document.querySelectorAll('button, label, .video-toggle span')].find(
+      (b) => (b.textContent || '').trim() === lab,
+    )
+    if (!el) return null
+    el.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'nearest' })
+    return (el.textContent || '').trim()
+  }, label)
+  if (!found) {
+    console.warn('missing exact label', label)
+    return false
+  }
+  await sleep(90)
+  const box = await page.evaluate((lab) => {
+    const el = [...document.querySelectorAll('button, label, .video-toggle span')].find(
+      (b) => (b.textContent || '').trim() === lab,
+    )
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return {
+      x: r.x + r.width / 2,
+      y: r.y + r.height / 2,
+      text: (el.textContent || '').trim(),
+      visible: r.width > 2 && r.height > 2 && r.bottom > 8 && r.top < window.innerHeight - 8,
+    }
+  }, label)
+  console.log('click-exact', box?.text || label)
+  if (box?.visible) await mouseClick(page, box)
+  else {
+    await page.evaluate((lab) => {
+      const el = [...document.querySelectorAll('button, label, .video-toggle span')].find(
+        (b) => (b.textContent || '').trim() === lab,
+      )
+      if (el instanceof HTMLElement) el.click()
+    }, label)
+    console.log('js-click-exact', label)
+  }
+  return true
+}
+
 async function clickBed(page, label) {
+  await page.evaluate((lab) => {
+    const el = [...document.querySelectorAll('.bed-pills button')].find(
+      (b) => (b.textContent || '').trim() === lab,
+    )
+    el?.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'nearest' })
+  }, label)
+  await sleep(80)
   const box = await page.evaluate((lab) => {
     const el = [...document.querySelectorAll('.bed-pills button')].find(
       (b) => (b.textContent || '').trim() === lab,
@@ -254,6 +302,7 @@ async function cam(page, mode) {
       go('.panel.booth', 'start')
     } else if (m === 'console') {
       go('.train-console', 'start')
+      go('.train-actions, button.go.quick, button.go.showcase', 'center')
     } else if (m === 'beds') {
       go('.beds', 'center')
     } else if (m === 'video') {
@@ -403,14 +452,36 @@ async function main() {
   if (preflight.translateBar) throw new Error('Translate UI present')
 
   console.log('preflight Start the set (load beds before REC)')
-  await jsClickText(page, '开始演出|Start the set')
+  await jsClickText(page, '^开始演出 / Start the set$')
   await page
     .waitForFunction(() => !!document.querySelector('.go.quick, .live-dot.on'), { timeout: 45000 })
     .catch(() => console.warn('start wait timed out'))
-  await jsClickText(page, '启发式\\s*Heuristic')
+  await jsClickText(page, '启发式 Heuristic')
   await sleep(800)
   const playing = await page.evaluate(() => !!document.querySelector('.go.quick, .live-dot.on'))
-  console.log('playing', playing)
+  const labels = await page.evaluate(() => {
+    const texts = [...document.querySelectorAll('button, label, .video-toggle span')].map((b) =>
+      (b.textContent || '').trim(),
+    )
+    return {
+      start: texts.includes('开始演出 / Start the set') || !!document.querySelector('.go.quick, .live-dot.on'),
+      quick: texts.includes('快速训练 / Quick Train'),
+      showcase: texts.includes('展示打碟 / Showcase'),
+      showcaseWrong: texts.some((t) => t === '演示 / Showcase' || t === '演示'),
+      trainToggle: texts.includes('训练 Train'),
+      testPattern: texts.includes('20s 测试图案 / Test pattern'),
+      videoMotive: texts.includes('视频动机 / Video motive'),
+      beds: [...document.querySelectorAll('.bed-pills button')].map((b) => (b.textContent || '').trim()),
+    }
+  })
+  console.log('playing', playing, 'labels', JSON.stringify(labels))
+  writeFileSync(`${OUT_DIR}/labels.json`, JSON.stringify(labels, null, 2))
+  if (!labels.quick || !labels.showcase || labels.showcaseWrong) {
+    throw new Error(`exact labels missing or Showcase is 演示: ${JSON.stringify(labels)}`)
+  }
+  if (!labels.testPattern || !labels.videoMotive || labels.beds.length < 3) {
+    throw new Error(`beds/video motive missing: ${JSON.stringify(labels)}`)
+  }
 
   await injectChrome(page)
   await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 })
@@ -491,7 +562,7 @@ async function main() {
   await cam(page, 'console')
   await setCursor(page, true)
   await untilT(t0, 48.0)
-  await clickText(page, '强化学习\\s*RL')
+  await clickExact(page, '强化学习 RL')
   await cam(page, 'console')
   await untilT(t0, 50.0)
   await nudgeKnob(page, 'lr', 0.03)
@@ -522,24 +593,25 @@ async function main() {
   })
   await cam(page, 'video')
   await untilT(t0, 75.0)
-  await clickText(page, '20s 测试图案|Test pattern')
+  await clickExact(page, '20s 测试图案 / Test pattern')
   await cam(page, 'video')
   await setCursor(page, false)
   await untilT(t0, 98.0)
 
-  // Shot 8 98–110 Quick Train
-  await cam(page, 'chart')
+  // Shot 8 98–110 Quick Train — bottom console must be in view
+  await cam(page, 'console')
   await setCursor(page, true)
-  const quick = await clickText(page, '快速训练|Quick Train')
-  if (!quick) await jsClickText(page, '训练\\s*Train')
-  await cam(page, 'chart')
+  const quick = await clickExact(page, '快速训练 / Quick Train')
+  if (!quick) throw new Error('Quick Train exact label not found: 快速训练 / Quick Train')
+  await cam(page, 'console')
   await setCursor(page, false)
   await untilT(t0, 110.0)
 
-  // Shot 9 110–126 Showcase
+  // Shot 9 110–126 Showcase — exact 「展示打碟 / Showcase」, never 「演示 / Showcase」
   await cam(page, 'console')
   await setCursor(page, true)
-  await clickText(page, '展示打碟|Showcase|演示')
+  const show = await clickExact(page, '展示打碟 / Showcase')
+  if (!show) throw new Error('Showcase exact label not found: 展示打碟 / Showcase')
   await cam(page, 'booth-show')
   await setCursor(page, false)
   await untilT(t0, 126.0)
