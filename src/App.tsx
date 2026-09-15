@@ -105,9 +105,26 @@ function BoothShot() {
 
 const SHOWCASE_UNLOCK = 0.12
 const QUICK_MS = 52000
+const DEFAULT_BED_ID = 'techno_120'
 
 type LoadPhase = 'boot' | 'data' | 'csr' | 'ready' | 'error'
 type ShowcasePhase = 'heuristic' | 'trained' | null
+
+type BedPair = {
+  id: string
+  label: string
+  bpm: number
+  a: string
+  b: string
+}
+
+const FALLBACK_BED: BedPair = {
+  id: DEFAULT_BED_ID,
+  label: 'Techno 120',
+  bpm: 120,
+  a: 'techno_120_a.wav',
+  b: 'techno_120_b.wav',
+}
 
 export default function App() {
   if (isBoothShot()) return <BoothShot />
@@ -143,6 +160,10 @@ function FlyDjApp() {
   const [callout, setCallout] = useState<Callout | null>(null)
   const [deltas, setDeltas] = useState<FaderDeltas>(emptyDeltas)
   const [injects, setInjects] = useState<Float32Array | null>(null)
+  const [bedPairs, setBedPairs] = useState<BedPair[]>([])
+  const [bedId, setBedId] = useState(DEFAULT_BED_ID)
+  const [bedsBusy, setBedsBusy] = useState(false)
+  const bedIdRef = useRef(DEFAULT_BED_ID)
   const [videoOn, setVideoOn] = useState(false)
 
   const djRef = useRef<DjEngine | null>(null)
@@ -206,6 +227,29 @@ function FlyDjApp() {
     const videoInject =
       videoOnRef.current && videoInjectRef.current ? new Float32Array(videoInjectRef.current) : undefined
     return { type: 'step' as const, inject, videoInject, gains, steps, dt: 0.016 }
+  }, [])
+
+  useEffect(() => {
+    let dead = false
+    ;(async () => {
+      try {
+        const res = await fetch('/audio/beds/manifest.json')
+        if (!res.ok) throw new Error('beds manifest missing')
+        const data = (await res.json()) as { pairs?: BedPair[] }
+        if (dead) return
+        const pairs = Array.isArray(data.pairs) ? data.pairs : []
+        setBedPairs(pairs)
+        if (!pairs.some((p) => p.id === bedIdRef.current) && pairs[0]) {
+          bedIdRef.current = pairs[0].id
+          setBedId(pairs[0].id)
+        }
+      } catch {
+        /* keep techno default; startShow falls back to /audio/deck-*.wav */
+      }
+    })()
+    return () => {
+      dead = true
+    }
   }, [])
 
   const rewardMa = useMemo(() => {
@@ -483,11 +527,57 @@ function FlyDjApp() {
     return () => window.clearInterval(id)
   }, [quickLeft])
 
+  const resolveBedPair = useCallback(
+    (id: string): BedPair => {
+      const found = bedPairs.find((p) => p.id === id)
+      if (found) return found
+      return FALLBACK_BED
+    },
+    [bedPairs],
+  )
+
+  /** Mid-critical: showcase or quick-train countdown — do not swap beds. */
+  const bedsLocked = mode === 'showcase' || quickLeft > 0 || bedsBusy
+
+  const applyBedPair = useCallback(async (pair: BedPair) => {
+    const dj = djRef.current
+    if (!dj) return
+    setBedsBusy(true)
+    try {
+      await dj.loadBeds(`/audio/beds/${pair.a}`, `/audio/beds/${pair.b}`, { bpm: pair.bpm })
+      if (dj.started) dj.apply(actionRef.current)
+    } finally {
+      setBedsBusy(false)
+    }
+  }, [])
+
+  const onBedChange = useCallback(
+    async (nextId: string) => {
+      if (nextId === bedIdRef.current) return
+      if (mode === 'showcase' || quickLeft > 0 || bedsBusy) return
+      const pair = resolveBedPair(nextId)
+      bedIdRef.current = pair.id
+      setBedId(pair.id)
+      try {
+        await applyBedPair(pair)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [applyBedPair, bedsBusy, mode, quickLeft, resolveBedPair],
+  )
+
   const startShow = useCallback(async () => {
     try {
       const ctx = new AudioContext()
       const dj = new DjEngine(ctx)
-      await dj.loadBeds('/audio/deck-a.wav', '/audio/deck-b.wav')
+      const pair = resolveBedPair(bedIdRef.current)
+      try {
+        await dj.loadBeds(`/audio/beds/${pair.a}`, `/audio/beds/${pair.b}`, { bpm: pair.bpm })
+      } catch {
+        // Fallback to the default deck copies (techno_120)
+        await dj.loadBeds('/audio/deck-a.wav', '/audio/deck-b.wav', { bpm: 120 })
+      }
       await dj.start()
       dj.apply(actionRef.current)
       djRef.current = dj
@@ -502,7 +592,7 @@ function FlyDjApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [types, withVideoInject])
+  }, [resolveBedPair, types, withVideoInject])
 
   const onMode = (m: ControllerMode) => {
     if (m === 'showcase') {
@@ -631,6 +721,25 @@ function FlyDjApp() {
                   </button>
                 ))}
               </div>
+              <div className="beds">
+                <div className="beds-head">
+                  <span>床轨 / Beds</span>
+                  <em>{bedsBusy ? '换轨中…' : bedsLocked ? '锁定 locked' : 'Flow Music 离线库'}</em>
+                </div>
+                <div className="bed-pills" role="group" aria-label="Bed pairs">
+                  {(bedPairs.length ? bedPairs : [FALLBACK_BED]).map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={bedId === p.id ? 'on' : ''}
+                      disabled={bedsLocked && bedId !== p.id}
+                      onClick={() => void onBedChange(p.id)}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               {!playing ? (
                 <button className="go" type="button" onClick={startShow}>
                   开始演出 / Start the set
@@ -727,9 +836,10 @@ function FlyDjApp() {
           {manifest?.honesty ??
             'CSR synapses are frozen MaleCNS v1.0 counts. Only the sensory encoder, optional pathway gains, and DJ policy head are trained. This is not biological spike data.'}{' '}
           边来自官方 feather（MD5 <code>f30e9dcca25cfd021bf1e7b3d975599e</code>），规则为 weight≥3 且
-          typed↔typed，从未编造突触。壳体为 FlyEM 官方 CB / OL / VNC neuropil shell，已抽稀仅供浏览器显示。音频为程序合成的可循环床，经 Web
-          Audio 双唱盘、交叉推子、滤波、低频 EQ 与主音量真实播放。视频动机把亮度/帧差等启发式特征注入 visual / mechano /
-          sensory_other，与音频 inject 相加；不是真实复眼或完整生物物理。
+          typed↔typed，从未编造突触。壳体为 FlyEM 官方 CB / OL / VNC neuropil shell，已抽稀仅供浏览器显示。音频床轨来自
+          Flow Music 离线库（techno / glitch / ambient / breakbeat 成对循环），经 Web Audio 双唱盘、交叉推子、滤波、低频 EQ
+          与主音量真实播放——这是器乐循环，不是「神经元在作曲」。可选视频动机：廉价亮度/运动启发式注入 visual / mechano /
+          sensory_other（与音频 inject 相加），不是真实果蝇视觉；CSR 解剖边仍冻结。
         </p>
       </footer>
     </div>
