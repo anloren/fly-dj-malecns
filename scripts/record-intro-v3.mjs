@@ -57,13 +57,10 @@ async function untilT(t0, sec) {
 function clickBox(page, re) {
   return page.evaluate((pattern) => {
     const rx = new RegExp(pattern)
-    const el = [...document.querySelectorAll('button, label, input')].find((b) =>
-      rx.test(b.textContent || ''),
-    )
+    const el = [...document.querySelectorAll('button, label')].find((b) => rx.test(b.textContent || ''))
     if (!el) return null
-    el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' })
     const r = el.getBoundingClientRect()
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2, text: (el.textContent || '').trim() }
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2, text: (el.textContent || '').trim(), on: r.width > 2 && r.height > 2 }
   }, re)
 }
 
@@ -75,14 +72,32 @@ async function mouseClick(page, box, steps = 10) {
   return true
 }
 
+async function jsClickText(page, re) {
+  const text = await page.evaluate((pattern) => {
+    const rx = new RegExp(pattern)
+    const el = [...document.querySelectorAll('button, label')].find((b) => rx.test(b.textContent || ''))
+    if (!el) return null
+    el.click()
+    return (el.textContent || '').trim()
+  }, re)
+  if (!text) {
+    console.warn('missing click target', re)
+    return false
+  }
+  console.log('js-click', text)
+  return true
+}
+
 async function clickText(page, re) {
   const box = await clickBox(page, re)
   if (!box) {
     console.warn('missing click target', re)
-    return false
+    return jsClickText(page, re)
   }
   console.log('click', box.text)
-  return mouseClick(page, box)
+  if (box.on) await mouseClick(page, box)
+  else await jsClickText(page, re)
+  return true
 }
 
 async function clickBed(page, label) {
@@ -91,7 +106,6 @@ async function clickBed(page, label) {
       (b) => (b.textContent || '').trim() === lab,
     )
     if (!el) return null
-    el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })
     const r = el.getBoundingClientRect()
     return { x: r.x + r.width / 2, y: r.y + r.height / 2, disabled: el.disabled }
   }, label)
@@ -166,6 +180,9 @@ async function injectChrome(page) {
         margin-top: 16px; color: #9aa6c8; font-size: 14px;
       }
       body.rec-hide-cursor, body.rec-hide-cursor * { cursor: none !important; }
+      /* Hide booth only — connectome WebGL survives. Do NOT hide booth (WebGL canvas collapses). */
+      body.rec-left main.split { grid-template-columns: 1fr 0fr !important; }
+      body.rec-left .panel.booth { visibility: hidden !important; }
     `
     document.head.appendChild(style)
     const title = document.createElement('div')
@@ -212,33 +229,29 @@ async function setCursor(page, show) {
 async function cam(page, mode) {
   await page.evaluate((m) => {
     document.documentElement.style.scrollBehavior = 'auto'
-    document.documentElement.style.zoom = ''
-    document.documentElement.style.transform = ''
+    document.documentElement.style.zoom = '1'
+    document.body.classList.remove('rec-left', 'rec-right')
     const app = document.querySelector('.app')
     if (app) {
       app.style.transform = ''
       app.style.transformOrigin = 'top left'
     }
+    const se = document.scrollingElement || document.documentElement
     const go = (sel, block = 'center') => {
       document.querySelector(sel)?.scrollIntoView({ behavior: 'instant', block, inline: 'nearest' })
     }
     if (m === 'full') {
-      document.documentElement.scrollTop = 0
-      document.scrollingElement && (document.scrollingElement.scrollTop = 0)
+      se.scrollTop = 0
     } else if (m === 'honesty') {
-      document.documentElement.style.zoom = '0.70'
-      document.documentElement.scrollTop = 0
+      document.documentElement.style.zoom = '0.56'
+      se.scrollTop = 0
     } else if (m === 'left') {
-      document.documentElement.scrollTop = 0
+      document.body.classList.add('rec-left')
+      se.scrollTop = 0
       go('.panel.connectome', 'start')
-      if (app) app.style.transform = 'scale(1.06) translateX(2%)'
     } else if (m === 'right') {
-      document.documentElement.scrollTop = 0
+      se.scrollTop = 0
       go('.panel.booth', 'start')
-      if (app) {
-        app.style.transformOrigin = 'top right'
-        app.style.transform = 'scale(1.07) translateX(-3%)'
-      }
     } else if (m === 'console') {
       go('.train-console', 'start')
     } else if (m === 'beds') {
@@ -248,11 +261,8 @@ async function cam(page, mode) {
     } else if (m === 'chart') {
       go('.chart', 'center')
     } else if (m === 'booth-show') {
-      go('.panel.booth', 'center')
-      if (app) {
-        app.style.transformOrigin = 'center right'
-        app.style.transform = 'scale(1.06) translateX(-2%)'
-      }
+      se.scrollTop = 0
+      go('.panel.booth', 'start')
     }
   }, mode)
 }
@@ -392,6 +402,16 @@ async function main() {
   }
   if (preflight.translateBar) throw new Error('Translate UI present')
 
+  console.log('preflight Start the set (load beds before REC)')
+  await jsClickText(page, '开始演出|Start the set')
+  await page
+    .waitForFunction(() => !!document.querySelector('.go.quick, .live-dot.on'), { timeout: 45000 })
+    .catch(() => console.warn('start wait timed out'))
+  await jsClickText(page, '启发式\\s*Heuristic')
+  await sleep(800)
+  const playing = await page.evaluate(() => !!document.querySelector('.go.quick, .live-dot.on'))
+  console.log('playing', playing)
+
   await injectChrome(page)
   await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 })
 
@@ -404,6 +424,11 @@ async function main() {
   } catch (e) {
     console.warn('xdotool', e.message)
   }
+
+  await setCursor(page, false)
+  await cam(page, 'full')
+  await setOverlay(page, 'title')
+  await sleep(250)
 
   console.log('starting ffmpeg x11grab')
   const ff = spawn(
@@ -437,15 +462,12 @@ async function main() {
   ff.stderr.on('data', (d) => {
     ffErr += d.toString()
   })
-  await sleep(800)
+  await sleep(400)
 
   const t0 = Date.now()
   console.log('REC T=0')
 
-  // Shot 1 0–5 title
-  await setCursor(page, false)
-  await cam(page, 'full')
-  await setOverlay(page, 'title')
+  // Shot 1 0–5 title (already up)
   await untilT(t0, 5.0)
 
   // Shot 2 5–14 honesty
@@ -454,12 +476,6 @@ async function main() {
   await page.hover('footer.honesty').catch(() => {})
   await untilT(t0, 13.5)
 
-  // Start + heuristic just before shot 3
-  await cam(page, 'full')
-  await setCursor(page, true)
-  await clickText(page, '开始演出|Start the set')
-  await sleep(200)
-  await clickText(page, '启发式\\s*Heuristic')
   await untilT(t0, 14.0)
 
   // Shot 3 14–30 connectome left
@@ -474,39 +490,40 @@ async function main() {
   // Shot 5 46–56 start + knobs
   await cam(page, 'console')
   await setCursor(page, true)
-  await clickText(page, '开始演出|Start the set').catch(() => {})
   await untilT(t0, 48.0)
   await clickText(page, '强化学习\\s*RL')
+  await cam(page, 'console')
   await untilT(t0, 50.0)
-  await page.evaluate(() => document.querySelector('.knobs')?.scrollIntoView({ block: 'center', behavior: 'instant' }))
   await nudgeKnob(page, 'lr', 0.03)
-  await sleep(400)
+  await sleep(350)
   await nudgeKnob(page, 'actionGain', 1.6)
+  await cam(page, 'console')
   await untilT(t0, 56.0)
 
   // Shot 6 56–74 beds
   await cam(page, 'beds')
   await clickBed(page, 'Glitch 110')
+  await cam(page, 'beds')
   await page
     .waitForFunction(() => !/换轨中/.test(document.querySelector('.beds-head em')?.textContent || ''), {
-      timeout: 6000,
+      timeout: 5000,
     })
     .catch(() => {})
   await untilT(t0, 64.0)
   await clickBed(page, 'Breakbeat 140')
+  await cam(page, 'beds')
   await untilT(t0, 74.0)
 
   // Shot 7 74–98 video motive
   await cam(page, 'video')
   await page.evaluate(() => {
     const input = document.querySelector('.video-motive input[type=checkbox]')
-    if (input && !input.checked) {
-      input.click()
-    }
-    document.querySelector('section.video-motive')?.scrollIntoView({ block: 'center', behavior: 'instant' })
+    if (input && !input.checked) input.click()
   })
+  await cam(page, 'video')
   await untilT(t0, 75.0)
   await clickText(page, '20s 测试图案|Test pattern')
+  await cam(page, 'video')
   await setCursor(page, false)
   await untilT(t0, 98.0)
 
@@ -514,14 +531,16 @@ async function main() {
   await cam(page, 'chart')
   await setCursor(page, true)
   const quick = await clickText(page, '快速训练|Quick Train')
-  if (!quick) await clickText(page, '训练\\s*Train')
+  if (!quick) await jsClickText(page, '训练\\s*Train')
+  await cam(page, 'chart')
   await setCursor(page, false)
   await untilT(t0, 110.0)
 
   // Shot 9 110–126 Showcase
-  await cam(page, 'booth-show')
+  await cam(page, 'console')
   await setCursor(page, true)
   await clickText(page, '展示打碟|Showcase|演示')
+  await cam(page, 'booth-show')
   await setCursor(page, false)
   await untilT(t0, 126.0)
 
