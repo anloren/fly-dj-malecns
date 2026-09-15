@@ -7,7 +7,7 @@
  *   node scripts/record-intro-v3.mjs
  */
 import { spawn, execFileSync } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createConnection } from 'node:net'
 import puppeteer from 'puppeteer-core'
 
@@ -100,15 +100,20 @@ async function clickText(page, re) {
   return true
 }
 
-async function clickExact(page, label) {
-  const found = await page.evaluate((lab) => {
-    const el = [...document.querySelectorAll('button, label, .video-toggle span')].find(
-      (b) => (b.textContent || '').trim() === lab,
-    )
-    if (!el) return null
-    el.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'nearest' })
-    return (el.textContent || '').trim()
-  }, label)
+async function clickExact(page, label, opts = {}) {
+  const doScroll = opts.scroll !== false
+  const found = await page.evaluate(
+    (lab, scroll) => {
+      const el = [...document.querySelectorAll('button, label, .video-toggle span')].find(
+        (b) => (b.textContent || '').trim() === lab,
+      )
+      if (!el) return null
+      if (scroll) el.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'nearest' })
+      return (el.textContent || '').trim()
+    },
+    label,
+    doScroll,
+  )
   if (!found) {
     console.warn('missing exact label', label)
     return false
@@ -127,17 +132,14 @@ async function clickExact(page, label) {
       visible: r.width > 2 && r.height > 2 && r.bottom > 8 && r.top < window.innerHeight - 8,
     }
   }, label)
-  console.log('click-exact', box?.text || label)
+  console.log('click-exact', box?.text || label, 'visible', !!box?.visible)
   if (box?.visible) await mouseClick(page, box)
-  else {
-    await page.evaluate((lab) => {
-      const el = [...document.querySelectorAll('button, label, .video-toggle span')].find(
-        (b) => (b.textContent || '').trim() === lab,
-      )
-      if (el instanceof HTMLElement) el.click()
-    }, label)
-    console.log('js-click-exact', label)
-  }
+  await page.evaluate((lab) => {
+    const el = [...document.querySelectorAll('button, label, .video-toggle span')].find(
+      (b) => (b.textContent || '').trim() === lab,
+    )
+    if (el instanceof HTMLElement) el.click()
+  }, label)
   return true
 }
 
@@ -184,7 +186,9 @@ async function injectChrome(page) {
         color: #f4f7ff;
       }
       #rec-title {
-        background: linear-gradient(180deg, rgba(4,6,12,0.72), rgba(4,6,12,0.88));
+        background: linear-gradient(180deg, rgba(4,6,12,0.92), rgba(4,6,12,0.96));
+        isolation: isolate;
+        transform: translateZ(0);
       }
       #rec-title .credit {
         font-family: 'IBM Plex Mono', monospace;
@@ -301,8 +305,8 @@ async function cam(page, mode) {
       se.scrollTop = 0
       go('.panel.booth', 'start')
     } else if (m === 'console') {
-      go('.train-console', 'start')
-      go('.train-actions, button.go.quick, button.go.showcase', 'center')
+      const actions = document.querySelector('.train-actions') || document.querySelector('.train-console')
+      actions?.scrollIntoView({ behavior: 'instant', block: 'start', inline: 'nearest' })
     } else if (m === 'beds') {
       go('.beds', 'center')
     } else if (m === 'video') {
@@ -354,6 +358,12 @@ async function main() {
   } catch {
     /* keep default */
   }
+  try {
+    rmSync('/tmp/flydj-chrome-v3', { recursive: true, force: true })
+  } catch {
+    /* ignore */
+  }
+
   console.log('display was', prevMode)
   let resized = false
   try {
@@ -499,7 +509,15 @@ async function main() {
   await setCursor(page, false)
   await cam(page, 'full')
   await setOverlay(page, 'title')
-  await sleep(250)
+  await page.waitForFunction(() => {
+    const el = document.getElementById('rec-title')
+    if (!el) return false
+    const r = el.getBoundingClientRect()
+    const st = getComputedStyle(el)
+    return st.display !== 'none' && r.width > 800 && r.height > 400
+  }, { timeout: 5000 })
+  await page.screenshot({ path: `${OUT_DIR}/title-preflight.png` })
+  console.log('title overlay ready')
 
   console.log('starting ffmpeg x11grab')
   const ff = spawn(
@@ -580,9 +598,22 @@ async function main() {
       timeout: 5000,
     })
     .catch(() => {})
+  console.log(
+    'bed-on',
+    await page.evaluate(() => document.querySelector('.bed-pills button.on')?.textContent?.trim() || ''),
+  )
   await untilT(t0, 64.0)
   await clickBed(page, 'Breakbeat 140')
   await cam(page, 'beds')
+  await page
+    .waitForFunction(() => !/换轨中/.test(document.querySelector('.beds-head em')?.textContent || ''), {
+      timeout: 5000,
+    })
+    .catch(() => {})
+  console.log(
+    'bed-on',
+    await page.evaluate(() => document.querySelector('.bed-pills button.on')?.textContent?.trim() || ''),
+  )
   await untilT(t0, 74.0)
 
   // Shot 7 74–98 video motive
@@ -595,22 +626,32 @@ async function main() {
   await untilT(t0, 75.0)
   await clickExact(page, '20s 测试图案 / Test pattern')
   await cam(page, 'video')
+  const videoState = await page.evaluate(() => ({
+    checked: !!document.querySelector('.video-motive input[type=checkbox]')?.checked,
+    demoOn: /测试图案/.test(document.querySelector('.video-actions button.on')?.textContent || ''),
+    wrap: document.querySelector('.video-preview-wrap p')?.textContent?.trim() || '',
+  }))
+  console.log('video-state', JSON.stringify(videoState))
+  if (!videoState.checked) throw new Error('Video motive checkbox did not stay on')
   await setCursor(page, false)
-  await untilT(t0, 98.0)
+  await untilT(t0, 96.5)
 
-  // Shot 8 98–110 Quick Train — bottom console must be in view
+  // Shot 8 98–110 Quick Train — bottom console must be in view (above ASS)
   await cam(page, 'console')
   await setCursor(page, true)
-  const quick = await clickExact(page, '快速训练 / Quick Train')
+  await untilT(t0, 98.0)
+  const quick = await clickExact(page, '快速训练 / Quick Train', { scroll: false })
   if (!quick) throw new Error('Quick Train exact label not found: 快速训练 / Quick Train')
-  await cam(page, 'console')
+  const quickOn = await page.evaluate(() => /快速训练 \d+s/.test(document.querySelector('button.go.quick')?.textContent || ''))
+  console.log('quick-train-running', quickOn)
+  if (!quickOn) throw new Error('Quick Train did not start after exact click')
   await setCursor(page, false)
   await untilT(t0, 110.0)
 
   // Shot 9 110–126 Showcase — exact 「展示打碟 / Showcase」, never 「演示 / Showcase」
   await cam(page, 'console')
   await setCursor(page, true)
-  const show = await clickExact(page, '展示打碟 / Showcase')
+  const show = await clickExact(page, '展示打碟 / Showcase', { scroll: false })
   if (!show) throw new Error('Showcase exact label not found: 展示打碟 / Showcase')
   await cam(page, 'booth-show')
   await setCursor(page, false)
