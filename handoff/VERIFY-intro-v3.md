@@ -1,6 +1,12 @@
 # Fly DJ intro v3 — VERIFY
 
-Captured 2026-09-15 against `main` @ `7759565` (bed pills + video motive + MaleCNS CSR).
+Recaptured 2026-09-15 against `main` @ `7759565` (bed pills + video motive + MaleCNS CSR).
+
+This pass locks the recorder to the live UI strings:
+
+- Showcase is **「展示打碟 / Showcase」** — never 「演示 / Showcase」
+- Quick Train is **「快速训练 / Quick Train」** — bottom console is scrolled into view first
+- Bed pills and **视频动机 / Video motive** + **20s 测试图案 / Test pattern** are on the clock
 
 ## Files
 
@@ -20,7 +26,7 @@ Captured 2026-09-15 against `main` @ `7759565` (bed pills + video motive + MaleC
 | Video codec | H.264 yuv420p 30 fps |
 | AUDIO | H.264 + AAC 192k · Techno 0–57 → Glitch 57–64 → Breakbeat 64–136 |
 | ASS | `ffmpeg -vf ass=` · font WenQuanYi Micro Hei · **BorderStyle=1** outline, no box |
-| App build | `npm run build` OK (tsc + vite) |
+| App build | app source unchanged on this branch |
 
 ## Chrome / Translate
 
@@ -32,25 +38,42 @@ Page preflight (before REC):
 {"lang":"zh-CN","translate":"no","bodyNo":true,"boot":false,"nodes":true,"edges":true,"translateBar":false}
 ```
 
-No Google Translate infobar in any sampled frame.
+Exact-label preflight after Start the set:
+
+```json
+{"start":true,"quick":true,"showcase":true,"showcaseWrong":false,"trainToggle":true,"testPattern":true,"videoMotive":true,"beds":["Techno 120","Glitch 110","Ambient 90","Breakbeat 140"]}
+```
+
+No Google Translate infobar. Recorder throws if Showcase is 「演示 / Showcase」 or if Quick Train / beds / video motive labels are missing.
 
 ## LIF / counts
 
 Waited until `.boot` gone. On-screen **164,506** nodes / **10.35M** edges (manifest 10,349,880). CSR gzip present.
 
+## Click log (exact strings)
+
+| Clock | Action | Logged |
+| --- | --- | --- |
+| preflight | `开始演出 / Start the set` · `启发式 Heuristic` | yes |
+| 48 s | `强化学习 RL` | visible |
+| 56–64 s | beds `Glitch 110` then `Breakbeat 140` | `bed-on` matched |
+| 75 s | `20s 测试图案 / Test pattern` | `checked:true` · `demoOn:true` · `测试图案 0.5s / 20s` |
+| 98 s | `快速训练 / Quick Train` | visible · `quick-train-running true` |
+| 110 s | `展示打碟 / Showcase` | visible · never `演示` |
+
 ## Shot clock (sampled frames)
 
 | t | Shot | Present |
 | --- | --- | --- |
-| 0–5 s | Title overlay 果蝇中枢 DJ / FLY DJ / MaleCNS v1.0 | yes |
+| 0–5 s | Title overlay 果蝇中枢 DJ / FLY DJ / MaleCNS v1.0 | yes (asserted before REC) |
 | 5–14 s | Honesty zoom-out + top stats 164,506 / 10.35M | yes |
-| 14–30 s | Left connectome lock (soma heat + raster) | yes, ≥14 s |
-| 30–46 s | Right booth + 6-leg fly (XF / FLT A / LOW / FLT B / MST / PUNCH) | yes; brief canvas refresh at the 30 s cut |
+| 14–30 s | Left connectome lock (soma heat + raster) | yes |
+| 30–46 s | Booth + 6-leg fly (XF / FLT A / LOW / FLT B / MST / PUNCH) | yes |
 | 46–56 s | Console · RL · knobs | yes |
-| 56–74 s | Bed pills Techno 120 → Glitch 110 → Breakbeat 140 | clicks logged; Techno then swap |
-| 74–98 s | Video motive ON · 20s test pattern (black quiet → flash → shake) · visual/mechano/sensory_other · 「不是果蝇视觉」 | yes |
-| 98–110 s | Quick Train (Stop shown, not clicked) · reward chart · beds **锁定 locked** | yes |
-| 110–126 s | Showcase banner + Heuristic 8s callout + booth | yes |
+| 56–74 s | Bed pills Techno 120 → Glitch 110 → Breakbeat 140 | pills on camera; clicks logged |
+| 74–98 s | Video motive · 20s test pattern · 「不是果蝇视觉」 | panel + exact button on camera; demo started |
+| 98–110 s | Quick Train in bottom console (Stop not clicked) | **快速训练 / Quick Train** in view, then countdown |
+| 110–126 s | Showcase · beds **锁定 locked** | **展示打碟 / Showcase** in view |
 | 126–136 s | Outro `npm install && npm run dev` · `:47301` · `github.com/anloren/fly-dj-malecns` | yes |
 
 ## Honesty (on camera)
