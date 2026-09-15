@@ -72,6 +72,22 @@ export type AudioFeatures = {
   beatPhase: number
 }
 
+/** Cheap CPU video features — heuristic, not fly vision. */
+export type VideoFeatures = {
+  lum: number
+  contrast: number
+  red: number
+  green: number
+  blue: number
+  motion: number
+  flow: number
+  edges: number
+  hueWarm: number
+  hueCool: number
+  flash: number
+  shake: number
+}
+
 export type DjAction = {
   crossfade: number
   filterA: number

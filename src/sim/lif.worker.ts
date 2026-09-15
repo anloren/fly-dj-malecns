@@ -16,6 +16,8 @@ type InitMsg = {
 type StepMsg = {
   type: 'step'
   inject: Float32Array
+  /** Optional second sensory inject (video motive); summed with audio inject. */
+  videoInject?: Float32Array
   gains: Float32Array
   steps: number
   dt: number
@@ -183,6 +185,13 @@ function readout(): {
   return { poolRates: pools, topK: top, vizRates, raster, rasterRates, meanRate: mean, rateStd }
 }
 
+function sumInject(audio: Float32Array, video?: Float32Array): Float32Array {
+  if (!video || video.length === 0) return audio
+  const n = Math.min(audio.length, video.length)
+  for (let i = 0; i < n; i++) audio[i] += video[i]
+  return audio
+}
+
 self.onmessage = async (ev: MessageEvent<Incoming>) => {
   const msg = ev.data
   if (msg.type === 'ping') {
@@ -225,7 +234,8 @@ self.onmessage = async (ev: MessageEvent<Incoming>) => {
     let nSpikes = 0
     const dt = Number(msg.dt) > 0 ? msg.dt : 0.016
     const steps = Math.max(1, msg.steps | 0)
-    for (let s = 0; s < steps; s++) nSpikes += stepOnce(msg.inject, msg.gains, dt)
+    const inject = sumInject(msg.inject, msg.videoInject)
+    for (let s = 0; s < steps; s++) nSpikes += stepOnce(inject, msg.gains, dt)
     const ro = readout()
     self.postMessage(
       {
